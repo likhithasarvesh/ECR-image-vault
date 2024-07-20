@@ -16,6 +16,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
 
+      - name: Install Vault CLI
+        run: |
+          curl -o vault.zip https://releases.hashicorp.com/vault/1.10.4/vault_1.10.4_linux_amd64.zip
+          unzip vault.zip
+          sudo mv vault /usr/local/bin/   
+
       - name: Log in to HashiCorp Vault
         env:
           VAULT_ADDR: ${{ secrets.VAULT_ADDR }}

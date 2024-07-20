@@ -1,0 +1,54 @@
+name: Build and Push Docker Image to ECR
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Log in to HashiCorp Vault
+        env:
+          VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+        run: |
+          echo "Logging into Vault..."
+          vault login $VAULT_TOKEN
+
+      - name: Get AWS credentials from Vault
+        id: aws-creds
+        run: |
+          echo "Fetching AWS credentials from Vault..."
+          creds=$(vault read -format=json aws/creds/my-role)
+          echo "::set-output name=aws-access-key-id::$(echo $creds | jq -r '.data.access_key')"
+          echo "::set-output name=aws-secret-access-key::$(echo $creds | jq -r '.data.secret_key')"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ steps.aws-creds.outputs.aws-access-key-id }}
+          aws-secret-access-key: ${{ steps.aws-creds.outputs.aws-secret-access-key }}
+          aws-region: ap-south-1  # Change to your desired AWS region
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        run: |
+          aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+      - name: Build, tag, and push image to ECR
+        env:
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REPOSITORY:$IMAGE_TAG ${{ secrets.ECR_REGISTRY }}/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push ${{ secrets.ECR_REGISTRY }}/$ECR_REPOSITORY:$IMAGE_TAG

@@ -29,7 +29,7 @@ jobs:
         run: |
           echo "Logging into Vault..."
           vault login $VAULT_TOKEN
-
+          echo $VAULT_TOKEN
       - name: Get AWS credentials from Vault
         id: aws-creds
         run: |

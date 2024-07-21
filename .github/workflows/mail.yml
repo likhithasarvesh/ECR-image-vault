@@ -22,21 +22,36 @@ jobs:
           unzip vault.zip
           sudo mv vault /usr/local/bin/   
 
-      - name: Log in to HashiCorp Vault
+    #   - name: Log in to HashiCorp Vault
+    #     env:
+    #       VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+    #       VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+    #     run: |
+    #       echo "Logging into Vault..."
+    #       vault login $VAULT_TOKEN
+    #       echo $VAULT_TOKEN
+    #   - name: Get AWS credentials from Vault
+    #     id: aws-creds
+    #     run: |
+    #       echo "Fetching AWS credentials from Vault..."
+    #       creds=$(vault read -format=json aws/creds/VaultRole)
+    #       echo "::set-output name=aws-access-key-id::$(echo $creds | jq -r '.data.access_key')"
+    #       echo "::set-output name=aws-secret-access-key::$(echo $creds | jq -r '.data.secret_key')"
+
+      - name: Login to Vault
+        run: |
+          curl --request POST --data '{"token": "${{ secrets.VAULT_TOKEN }}"}' ${VAULT_ADDR}/v1/auth/github/login | jq -r ".auth.client_token" > token
         env:
           VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
-          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+
+      - name: Get AWS Credentials
         run: |
-          echo "Logging into Vault..."
-          vault login $VAULT_TOKEN
-          echo $VAULT_TOKEN
-      - name: Get AWS credentials from Vault
-        id: aws-creds
-        run: |
-          echo "Fetching AWS credentials from Vault..."
-          creds=$(vault read -format=json aws/creds/VaultRole)
-          echo "::set-output name=aws-access-key-id::$(echo $creds | jq -r '.data.access_key')"
-          echo "::set-output name=aws-secret-access-key::$(echo $creds | jq -r '.data.secret_key')"
+         VAULT_TOKEN=$(cat token)
+         curl --header "X-Vault-Token: $VAULT_TOKEN" ${VAULT_ADDR}/v1/aws/creds/VaultRole | jq -r ".data.access_key, .data.secret_key" > creds
+         ACCESS_KEY=$(sed -n '1p' creds)
+         SECRET_KEY=$(sed -n '2p' creds)
+         echo "AWS_ACCESS_KEY_ID=${ACCESS_KEY}" >> $GITHUB_ENV
+         echo "AWS_SECRET_ACCESS_KEY=${SECRET_KEY}" >> $GITHUB_ENV
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
